@@ -26,14 +26,17 @@
 
 int shiftCount = 0;
 int ctChk = 0;
+int seq = 0;
 
 void nano_wait(unsigned int n) {
+    //waits for n nanoseconds
     asm(    "        mov r0,%0\n"
             "repeat: sub r0,#83\n"
             "        bgt repeat\n" : : "r"(n) : "r0", "cc");
 }
 
 void spi_cmd(char b) {
+    //sends b to Data Register when the transmit buffer is empty
     // Your code goes here.
     while((SPI2->SR & SPI_SR_TXE) == 0);
     SPI2->DR = b;
@@ -43,7 +46,29 @@ void spi_data(char b) {
     // Your code goes here.
     while((SPI2->SR & SPI_SR_TXE) == 0);
     SPI2->DR = 0x200 | b;
+}
 
+void dma_spi_init(void) {
+    // Your code goes here.
+    //initializes DMA for SPI
+    /*** WILL NEED TO BE ALTERED - NEED TO FIGURE OUT WHAT & HOW ***/
+    RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+    DMA1_Channel5->CCR &= ~DMA_CCR_EN;
+    DMA1_Channel5->CMAR = seq;
+    DMA1_Channel5->CPAR = &SPI2->DR;
+    DMA1_Channel5->CNDTR = 34;
+    DMA1_Channel5->CCR |= DMA_CCR_DIR;
+    DMA1_Channel5->CCR |= DMA_CCR_CIRC;
+    DMA1_Channel5->CCR &= ~DMA_CCR_MSIZE;
+    DMA1_Channel5->CCR |= DMA_CCR_MSIZE_0;
+    DMA1_Channel5->CCR &= ~DMA_CCR_PSIZE;
+    DMA1_Channel5->CCR |= DMA_CCR_PSIZE_0;
+    DMA1_Channel5->CCR |= DMA_CCR_MINC;
+    DMA1_Channel5->CCR &= ~DMA_CCR_PL;
+
+    SPI2->CR2 |= SPI_CR2_TXDMAEN;
+
+    DMA1_Channel5->CCR |= DMA_CCR_EN;
 }
 
 void bitbang_sendbit(int b) {
@@ -148,22 +173,5 @@ void sendDig(uint8_t val) {
 
 int main(void)
 {
-    //data in PC6
-    //shift clk in PC7
-    //store clk in PC9
-
-    //gpio_setup();
-    //tim6_setup();
-    /*uint8_t numList[10] = {s_0, s_1, s_2, s_3, s_4, s_5, s_6, s_7, s_8, s_9};
-    int ind = 0;
-    while(1) {
-        sendDig(numList[ind]);
-        ind++;
-        if(ind == 10) {
-            ind = 0;
-        }
-        micro_wait(500000);
-    }
-    //sendDig(s_1);*/
     for(;;);
 }
