@@ -1,0 +1,56 @@
+Workflow of SPI 7SEG multiplexing functions
+
+setup GPIO, SPI, DMA
+
+NORMAL TIMING FUNCTION
+ - have array w/ digits corresponding to 7-seg equivalents
+        seg7nums = {s_0, s_1, s_2, s_3, s_4, s_5, s_6, s_7, s_8, s_9)
+ - assign 7-segs to ss0 - ss5 (b/c we have 6)
+        i.e., ss0, ss1 => hours; ss2, ss3 => mins; ss4, ss5 => secs
+ - get 3 2-digit numbers based on clock (hrs, mins, secs)
+ - assign each digit to a display using the following logic:
+        hrT = hrs / 10
+        hrO = hrs % 10
+        mnT = mins / 10
+        mnO = mins % 10
+        scT = secs / 10
+        scO = secs % 10
+
+        //add illuminate DP as well for ss1-ss4
+        ss0 = seg7nums[hrT]
+        ss1 = seg7nums[hrO] & ~(0x80)
+        ss2 = seg7nums[mnT] & ~(0x80)
+        ss3 = seg7nums[mnO] & ~(0x80)
+        ss4 = seg7nums[scT] & ~(0x80)
+        ss5 = seg7nums[scO]
+
+ - include select bytes (padding select w/ 2 1s at LSB)
+        //note each selector (ssx_sel) = (ss(x-1)_sel << 1) | 1. This might be useful but maybe not
+        ss0_sel = 11111011 = 0xFB
+        ss1_sel = 11110111 = 0xF7
+        ss2_sel = 11101111 = 0xEF
+        ss3_sel = 11011111 = 0xDF
+        ss4_sel = 10111111 = 0xBF
+        ss5_sel = 01111111 - 0x7F
+ - assign to vals:
+        spi_send0 = (ss0 << 8) | ss0_sel;
+        spi_send1 = (ss1 << 8) | ss1_sel;
+        spi_send2 = (ss2 << 8) | ss2_sel;
+        spi_send3 = (ss3 << 8) | ss3_sel;
+        spi_send4 = (ss4 << 8) | ss4_sel;
+        spi_send5 = (ss5 << 8) | ss5_sel;
+        spi_send[6] = {spi_send0, spi_send1, spi_send2, spi_send3, spi_send4, spi_send5}
+
+ - update ssx as needed
+        use DMA for this?
+
+
+USING DMA
+        CMAR = memory address in prgm that contains data to be sent to SPI->DR
+                spi_send values
+        **DMA1_Channel5->CMAR = spi_send;
+        I think we do want circular mode b/c we always want to be sending this data.
+        Top priority (11)
+                Not sure if this matters b/c I'm not sure if anything else will be using DMA, but just to be safe for now.
+        Read from memory (DIR = 1)
+        
