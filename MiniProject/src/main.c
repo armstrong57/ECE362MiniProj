@@ -12,21 +12,25 @@
 #include "stm32f0xx.h"
 #include "stm32f0_discovery.h"
 
-#define s_0 0x3F
-#define s_1 0x06
-#define s_2 0x5B
-#define s_3 0x4F
-#define s_4 0x66
-#define s_5 0x6D
-#define s_6 0x7D
-#define s_7 0x07
-#define s_8 0x7F
-#define s_9 0x67
+#define s_0 0xC0
+#define s_1 0xF9
+#define s_2 0xA4
+#define s_3 0xB0
+#define s_4 0x99
+#define s_5 0x92
+#define s_6 0x82
+#define s_7 0xF8
+#define s_8 0x80
+#define s_9 0x98
 #define SPI_DELAY 1337
 
-int shiftCount = 0;
-int ctChk = 0;
-int seq = 0;
+//int shiftCount = 0;
+//int ctChk = 0;
+//int seq = 0;
+uint8_t seg7nums[10] = {s_0, s_1, s_2, s_3, s_4, s_5, s_6, s_7, s_8, s_9};
+uint8_t ss0, ss1, ss2, ss3, ss4, ss5;
+uint16_t spi_send[6];
+
 
 void nano_wait(unsigned int n) {
     //waits for n nanoseconds
@@ -54,7 +58,7 @@ void dma_spi_init(void) {
     /*** WILL NEED TO BE ALTERED - NEED TO FIGURE OUT WHAT & HOW ***/
     RCC->AHBENR |= RCC_AHBENR_DMA1EN;
     DMA1_Channel5->CCR &= ~DMA_CCR_EN;
-    DMA1_Channel5->CMAR = seq;
+    DMA1_Channel5->CMAR = spi_send;
     DMA1_Channel5->CPAR = &SPI2->DR;
     DMA1_Channel5->CNDTR = 34;
     DMA1_Channel5->CCR |= DMA_CCR_DIR;
@@ -115,6 +119,11 @@ void spi_setup(void) {
     SPI2->CR1 |= SPI_CR1_SPE; //enable spi2
 }
 
+void spi_sendCode(uint16_t valEn) {
+    //valEn - 16bit value to be sent to 7-segs: 8-bit val & 8-bit enable code
+
+}
+
 void gpio_setup(void) {
     //setup gpio for direct write to 7-segs
 //    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
@@ -171,7 +180,45 @@ void sendDig(uint8_t val) {
     GPIOA->ODR |= ~val;
 }
 
+int input_Digit (void) {
+    int inDig;
+    //inDig = get_key_pressed(); //this will be from Sam's code
+
+}
+
 int main(void)
 {
+    int hrs, mins, secs;
+    int hrT, hrO, mnT, mnO, scT, scO;
+    uint16_t spi_send0, spi_send1, spi_send2, spi_send3, spi_send4, spi_send5;
+
+    hrT = hrs / 10;
+    hrO = hrs % 10;
+    mnT = mins / 10;
+    mnO = mins % 10;
+    scT = secs / 10;
+    scO = secs % 10;
+
+    ss0 = seg7nums[hrT];
+    ss1 = seg7nums[hrO] & ~0x80;
+    ss2 = seg7nums[mnT] & ~0x80;
+    ss3 = seg7nums[mnO] & ~0x80;
+    ss4 = seg7nums[scT] & ~0x80;
+    ss5 = seg7nums[scO] & ~0x80;
+
+    spi_send0 = (ss0 << 8) | (0xFB);
+    spi_send1 = (ss1 << 8) | ((0xFB << 1) & 0xFF);
+    spi_send2 = (ss2 << 8) | ((0xFB << 2) & 0xFF);
+    spi_send3 = (ss3 << 8) | ((0xFB << 3) & 0xFF);
+    spi_send4 = (ss4 << 8) | ((0xFB << 4) & 0xFF);
+    spi_send5 = (ss5 << 8) | ((0xFB << 5) & 0xFF);
+
+    spi_send[0] = spi_send0;
+    spi_send[1] = spi_send1;
+    spi_send[2] = spi_send2;
+    spi_send[3] = spi_send3;
+    spi_send[4] = spi_send4;
+    spi_send[5] = spi_send5;
+
     for(;;);
 }
