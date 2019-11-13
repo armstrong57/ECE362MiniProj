@@ -56,19 +56,19 @@ void dma_spi_init(void) {
     // Your code goes here.
     //initializes DMA for SPI
     /*** WILL NEED TO BE ALTERED - NEED TO FIGURE OUT WHAT & HOW ***/
-    RCC->AHBENR |= RCC_AHBENR_DMA1EN;
-    DMA1_Channel5->CCR &= ~DMA_CCR_EN;
-    DMA1_Channel5->CMAR = spi_send;
-    DMA1_Channel5->CPAR = &SPI2->DR;
-    DMA1_Channel5->CNDTR = 34;
-    DMA1_Channel5->CCR |= DMA_CCR_DIR;
-    DMA1_Channel5->CCR |= DMA_CCR_CIRC;
-    DMA1_Channel5->CCR &= ~DMA_CCR_MSIZE;
-    DMA1_Channel5->CCR |= DMA_CCR_MSIZE_0;
-    DMA1_Channel5->CCR &= ~DMA_CCR_PSIZE;
-    DMA1_Channel5->CCR |= DMA_CCR_PSIZE_0;
-    DMA1_Channel5->CCR |= DMA_CCR_MINC;
-    DMA1_Channel5->CCR &= ~DMA_CCR_PL;
+    RCC->AHBENR |= RCC_AHBENR_DMA1EN; //enable clock to DMA
+    DMA1_Channel5->CCR &= ~DMA_CCR_EN; //disable DMA
+    DMA1_Channel5->CMAR = spi_send; //set memory address to spi_send
+    DMA1_Channel5->CPAR = &SPI2->DR; //set peripheral address to SPI_DR
+    DMA1_Channel5->CNDTR = 6; //sending 6 pieces of data - 1 16-bit vals per 7-seg
+    DMA1_Channel5->CCR |= DMA_CCR_DIR; //read from memory
+    DMA1_Channel5->CCR |= DMA_CCR_CIRC; //enable circular mode
+    DMA1_Channel5->CCR &= ~DMA_CCR_MSIZE; //clear msize
+    DMA1_Channel5->CCR |= DMA_CCR_MSIZE_0; //msize = 01, 16-bit
+    DMA1_Channel5->CCR &= ~DMA_CCR_PSIZE; //clear psize
+    DMA1_Channel5->CCR |= DMA_CCR_PSIZE_0; //psize = 01, 16-bit
+    DMA1_Channel5->CCR |= DMA_CCR_MINC; //memory increment mode enable
+    DMA1_Channel5->CCR |= DMA_CCR_PL_0 | DMA_CCR_PL_1; //priority = 11, very high
 
     SPI2->CR2 |= SPI_CR2_TXDMAEN;
 
@@ -183,11 +183,12 @@ void sendDig(uint8_t val) {
 int input_Digit (void) {
     int inDig;
     //inDig = get_key_pressed(); //this will be from Sam's code
-
+    return 0;
 }
 
 int main(void)
 {
+    //figure out variables for current time, input time
     int hrs, mins, secs;
     int hrT, hrO, mnT, mnO, scT, scO;
     uint16_t spi_send0, spi_send1, spi_send2, spi_send3, spi_send4, spi_send5;
