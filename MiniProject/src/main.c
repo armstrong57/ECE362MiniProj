@@ -28,7 +28,7 @@
 //int ctChk = 0;
 //int seq = 0;
 uint8_t seg7nums[10] = {s_0, s_1, s_2, s_3, s_4, s_5, s_6, s_7, s_8, s_9};
-uint8_t ss0, ss1, ss2, ss3, ss4, ss5;
+//uint8_t ss0, ss1, ss2, ss3, ss4, ss5;
 uint16_t spi_send[6];
 
 
@@ -110,11 +110,11 @@ void spi_setup(void) {
 
     RCC->APB1ENR |= RCC_APB1ENR_SPI2EN; //enable clock to spi2
     //set bits in spi2->cr1: bidimode, bidioe, mstr, and set baud rate to 111.
-    SPI2->CR1 |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_MSTR |
+    SPI2->CR1 |= SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_MSTR | SPI_CR1_BR_2 |
             SPI_CR1_BR_1 | SPI_CR1_BR_0;
     SPI2->CR1 &= ~(SPI_CR1_CPOL | SPI_CR1_CPHA); //set cpol & cpha to 0.
     //set data size to 1001 (10-bit) and set NSSP & SSOE bits
-    SPI2->CR2 = (SPI_CR2_DS_3 | SPI_CR2_DS_0 | SPI_CR2_NSSP | SPI_CR2_SSOE);
+    SPI2->CR2 = (SPI_CR2_DS_3 | SPI_CR2_DS_2 |  SPI_CR2_DS_1 | SPI_CR2_DS_0 | SPI_CR2_NSSP | SPI_CR2_SSOE);
 
     SPI2->CR1 |= SPI_CR1_SPE; //enable spi2
 }
@@ -192,27 +192,28 @@ int main(void)
     int hrs, mins, secs;
     int hrT, hrO, mnT, mnO, scT, scO;
     uint16_t spi_send0, spi_send1, spi_send2, spi_send3, spi_send4, spi_send5;
+    uint8_t ss0, ss1, ss2, ss3, ss4, ss5;
 
-    hrT = hrs / 10;
-    hrO = hrs % 10;
-    mnT = mins / 10;
-    mnO = mins % 10;
-    scT = secs / 10;
-    scO = secs % 10;
+    hrT = 1; //hrs / 10;
+    hrO = 1; //hrs % 10;
+    mnT = 1; //mins / 10;
+    mnO = 1; //mins % 10;
+    scT = 1; //secs / 10;
+    scO = 1; //secs % 10;
 
     ss0 = seg7nums[hrT];
-    ss1 = seg7nums[hrO] & ~0x80;
-    ss2 = seg7nums[mnT] & ~0x80;
-    ss3 = seg7nums[mnO] & ~0x80;
-    ss4 = seg7nums[scT] & ~0x80;
-    ss5 = seg7nums[scO] & ~0x80;
+    ss1 = seg7nums[hrO];
+    ss2 = seg7nums[mnT];
+    ss3 = seg7nums[mnO];
+    ss4 = seg7nums[scT];
+    ss5 = seg7nums[scO];
 
     spi_send0 = (ss0 << 8) | (0xFB);
-    spi_send1 = (ss1 << 8) | ((0xFB << 1) & 0xFF);
-    spi_send2 = (ss2 << 8) | ((0xFB << 2) & 0xFF);
-    spi_send3 = (ss3 << 8) | ((0xFB << 3) & 0xFF);
-    spi_send4 = (ss4 << 8) | ((0xFB << 4) & 0xFF);
-    spi_send5 = (ss5 << 8) | ((0xFB << 5) & 0xFF);
+    spi_send1 = (ss1 << 8) | (((0xFB << 1) & 0xFF) | 1);
+    spi_send2 = (ss2 << 8) | (((0xFB << 2) & 0xFF) | 3);
+    spi_send3 = (ss3 << 8) | (((0xFB << 3) & 0xFF) | 7);
+    spi_send4 = (ss4 << 8) | (((0xFB << 4) & 0xFF) | 15);
+    spi_send5 = (ss5 << 8) | (((0xFB << 5) & 0xFF) | 31);
 
     spi_send[0] = spi_send0;
     spi_send[1] = spi_send1;
@@ -220,6 +221,10 @@ int main(void)
     spi_send[3] = spi_send3;
     spi_send[4] = spi_send4;
     spi_send[5] = spi_send5;
+
+    gpio_setup();
+    spi_setup();
+    dma_spi_init();
 
     for(;;);
 }
