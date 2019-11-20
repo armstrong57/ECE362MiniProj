@@ -34,35 +34,84 @@ char char_lookup[16] = {'1','4','7','*','2','5','8','0','3','6','9','#','A','B',
 int alarm_hrT, alarm_mnT, alarm_scT, alarm_hrO, alarm_mnO, alarm_scO;
 int * alarmTime;
 
-int hrs = 23;
-int mins = 50;
+int hrs = 18;
+int mins = 9;
 int secs = 0;
 int hrT, hrO, mnT, mnO, scT, scO;
 uint16_t spi_send0, spi_send1, spi_send2, spi_send3, spi_send4, spi_send5;
 uint8_t ss0, ss1, ss2, ss3, ss4, ss5;
 
 int time_disp = 1;
-/*
-void nano_wait(unsigned int n) {
-    //waits for n nanoseconds
-    asm(    "        mov r0,%0\n"
-            "repeat: sub r0,#83\n"
-            "        bgt repeat\n" : : "r"(n) : "r0", "cc");
+
+int get_key_press() {
+    while(1) {
+        for(int i = 0; i < 16; i++) {
+            if(history[i] == 1) {
+                return i;
+            }
+        }
+    }
 }
 
-void spi_cmd(char b) {
-    //sends b to Data Register when the transmit buffer is empty
-    // Your code goes here.
-    while((SPI2->SR & SPI_SR_TXE) == 0);
-    SPI2->DR = b;
+int get_key_release() {
+    while(1) {
+        for(int i = 0; i < 16; i++) {
+            if(history[i] == -2) {
+                return i;
+            }
+        }
+    }
 }
 
-void spi_data(char b) {
-    // Your code goes here.
-    while((SPI2->SR & SPI_SR_TXE) == 0);
-    SPI2->DR = 0x200 | b;
-}*/
+void TIM6_DAC_IRQHandler() {
+    TIM6->SR &= ~TIM_SR_UIF;
+    int row = (GPIOA->IDR >> 4) & 0xf;
+    int index = col << 2;
+    history[index] = history[index] << 1;
+    history[index] = history[index] | (row & 0x1);
+    history[index + 1] = history[index + 1] << 1;
+    history[index + 1] = history[index + 1] | ((row >> 1) & 0x1);
+    history[index + 2] = history[index + 2] << 1;
+    history[index + 2] = history[index + 2] | ((row >> 2) & 0x1);
+    history[index + 3] = history[index + 3] << 1;
+    history[index + 3] = history[index + 3] | ((row >> 3) & 0x1);
+    col = col + 1;
+    if(col > 3) {
+        col = 0;
+    }
+    GPIOA->ODR = (1 << col);
+}
 
+void setup_timer6() {
+    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
+    TIM6->PSC = 480 - 1;
+    TIM6->ARR = 100 - 1;
+    TIM6->DIER |= TIM_DIER_UIE;
+    NVIC_SetPriority(TIM6_DAC_IRQn, 192);
+    NVIC->ISER[0] = 1 << TIM6_DAC_IRQn;
+    TIM6->CR1 |= TIM_CR1_CEN;
+}
+
+void init_keypad() {
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
+    GPIOA->MODER &= ~0x0000ffff;
+    GPIOA->MODER |= 0x00000055;
+    GPIOA->PUPDR &= ~0x0000ff00;
+    GPIOA->PUPDR |= 0x0000aa00;
+}
+
+int get_key_pressed() {
+    int key = get_key_press();
+    while(key != get_key_release());
+    return key;
+}
+
+char get_char_key() {
+    int index = get_key_pressed();
+    return char_lookup[index];
+}
+
+//This function works
 void dma_spi_init(void) {
     // Your code goes here.
     //initializes DMA for SPI
@@ -86,6 +135,7 @@ void dma_spi_init(void) {
     DMA1_Channel5->CCR |= DMA_CCR_EN;
 }
 
+//This function works
 void spi_setup(void) {
     RCC->AHBENR |= RCC_AHBENR_GPIOBEN; //enable clock to gpiob
     GPIOB->MODER &= ~(0xCF000000); //clear moder for pb12, pb13, pb15
@@ -104,7 +154,7 @@ void spi_setup(void) {
     SPI2->CR1 |= SPI_CR1_SPE; //enable spi2
 }
 
-
+//This function works
 void gpio_setup(void) {
     //setup gpio for direct write to 7-segs
 //    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
@@ -120,14 +170,17 @@ void gpio_setup(void) {
     GPIOB->MODER |=    (1<<(2*13)) | (1<<(2*15));
 
     //LED output for testing alarm
-    GPIOB->MODER &= ~(3 << (2 * 1));
-    GPIOB->MODER |= 1 << (2 * 1);
+    GPIOB->MODER &= ~(3 << (2 * 5));
+    GPIOB->MODER |= 1 << (2 * 5);
 }
 
+//This function works
 void tim15_setup(void) {
     RCC->APB2ENR |= RCC_APB2ENR_TIM15EN;
-    TIM15->ARR = 100 - 1;
-    TIM15->PSC = 8000 - 1;
+    //arr = 100, psc = 8000 --> fast mode (1 min / s)
+    //arr = 1000, psc = 48000 --> normal mode (1s/s)
+    TIM15->ARR = 1000 - 1;
+    TIM15->PSC = 48000 - 1;
     TIM15->DIER |= TIM_DIER_UIE;
     TIM15->CR1 |= TIM_CR1_CEN;
 
@@ -135,8 +188,7 @@ void tim15_setup(void) {
     NVIC->ISER[0] = 1 << TIM15_IRQn;
 }
 
-
-
+//This function works
 void TIM15_IRQHandler(void) {
     secs++;
     if(secs == 60) {
@@ -182,87 +234,19 @@ void TIM15_IRQHandler(void) {
     TIM15->SR &= ~TIM_SR_UIF;
 }
 
-void trigger_alarm(int * alarmTime) {
+//This function works
+void trigger_alarm(int * time) {
     while(1) {
-        if(hrs == (alarmTime[0] * 10 + alarmTime[1]) &&
-                mins == (alarmTime[2] * 10 + alarmTime[3]) &&
-                secs == (alarmTime[4] * 10 + alarmTime[5])) {
-            GPIOB->ODR |= 0x2;
+        if(hrs == (time[0] * 10 + time[1]) &&
+                mins == (time[2] * 10 + time[3]) &&
+                secs == (time[4] * 10 + time[5])) {
+            GPIOB->ODR |= 1 << 5;
             return;
         }
     }
 }
 
-int get_key_press() {
-    while(1) {
-        for(int i = 0; i < 16; i++) {
-            if(history[i] == 1) {
-                return i;
-            }
-        }
-    }
-}
-
-// The functionality of this subroutine is described in the lab document
-int get_key_release() {
-    while(1) {
-        for(int i = 0; i < 16; i++) {
-            if(history[i] == -2) {
-                return i;
-            }
-        }
-    }
-}
-
-void TIM6_DAC_IRQHandler() {
-    TIM6->SR &= ~TIM_SR_UIF;
-    int row = (GPIOA->IDR >> 4) & 0xf;
-    int index = col << 2;
-    history[index] = history[index] << 1;
-    history[index] = history[index] | (row & 0x1);
-    history[index + 1] = history[index + 1] << 1;
-    history[index + 1] = history[index + 1] | ((row >> 1) & 0x1);
-    history[index + 2] = history[index + 2] << 1;
-    history[index + 2] = history[index + 2] | ((row >> 2) & 0x1);
-    history[index + 3] = history[index + 3] << 1;
-    history[index + 3] = history[index + 3] | ((row >> 3) & 0x1);
-    col = col + 1;
-    if(col > 3) {
-        col = 0;
-    }
-    GPIOA->ODR = (1 << col);
-}
-
-void setup_timer6() {
-    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
-    TIM6->PSC = 480 - 1;
-    TIM6->ARR = 100 - 1;
-    TIM6->DIER |= TIM_DIER_UIE;
-    NVIC_SetPriority(TIM6_DAC_IRQn, 192);
-    NVIC->ISER[0] = 1 << TIM6_DAC_IRQn;
-    TIM6->CR1 |= TIM_CR1_CEN;
-}
-
-
-void init_keypad() {
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-    GPIOA->MODER &= ~0x0000ffff;
-    GPIOA->MODER |= 0x00000055;
-    GPIOA->PUPDR &= ~0x0000ff00;
-    GPIOA->PUPDR |= 0x0000aa00;
-}
-int get_key_pressed() {
-    int key = get_key_press();
-    while(key != get_key_release());
-    return key;
-}
-
-char get_char_key() {
-    int index = get_key_pressed();
-    return char_lookup[index];
-}
-
-
+//Check this function
 int input_Digit (int pos) {
     //pos == 0: hrT
     //pos == 1: hrO
@@ -271,59 +255,75 @@ int input_Digit (int pos) {
     //pos == 4: scT
     //pos == 5: scO
     int inDig;
-    inDig = get_key_pressed(); //this will be from Sam's code
+    inDig = get_char_key(); //this will be from Sam's code
     if(pos == 0) {
-        ss0 = seg7nums[inDig];
-        spi_send0 = (ss0 << 8) | (0xFE); //11111011
-        spi_send[0] = spi_send0;
+        //ss0 = seg7nums[inDig];
+        //spi_send0 = (ss0 << 8) | (0xFE); //11111011
+        //spi_send[0] = spi_send0;
         while (inDig > 2) {
-            inDig = get_key_pressed();
-            ss0 = seg7nums[inDig];
-            spi_send0 = (ss0 << 8) | (0xFE); //11111011
-            spi_send[0] = spi_send0;
+            inDig = get_char_key();
+            //ss0 = seg7nums[inDig];
+            //spi_send0 = (ss0 << 8) | (0xFE); //11111011
+            //spi_send[0] = spi_send0;
         }
         return inDig;
     } if(pos == 1) {
-        ss1 = seg7nums[inDig];
-        spi_send1 = (ss1 << 8) | (0xFD); //11110111
-        spi_send[1] = spi_send1;
+        //ss1 = seg7nums[inDig];
+        //spi_send1 = (ss1 << 8) | (0xFD); //11110111
+        //spi_send[1] = spi_send1;
         while (alarm_hrT == 2 && inDig > 3) {
-            inDig = get_key_pressed();
-            ss1 = seg7nums[inDig];
-            spi_send1 = (ss1 << 8) | (0xFD); //11110111
-            spi_send[1] = spi_send1;
+            inDig = get_char_key();
+            //ss1 = seg7nums[inDig];
+            //spi_send1 = (ss1 << 8) | (0xFD); //11110111
+            //spi_send[1] = spi_send1;
 
         }
         return inDig;
     } if(pos == 2) {
-        ss2 = seg7nums[inDig];
-        spi_send2 = (ss2 << 8) | (0xFB); //11101111
-        spi_send[2] = spi_send2;
+        //ss2 = seg7nums[inDig];
+        //spi_send2 = (ss2 << 8) | (0xFB); //11101111
+        //spi_send[2] = spi_send2;
         while(inDig > 5) {
-            inDig = get_key_pressed();
-            ss2 = seg7nums[inDig];
-            spi_send2 = (ss2 << 8) | (0xFB); //11101111
-            spi_send[2] = spi_send2;
+            inDig = get_char_key();
+            //ss2 = seg7nums[inDig];
+            //spi_send2 = (ss2 << 8) | (0xFB); //11101111
+            //spi_send[2] = spi_send2;
 
         }
         return inDig;
     } if(pos == 3) {
-        ss3 = seg7nums[inDig];
-        spi_send3 = (ss3 << 8) | (0xF7); //11011111
-        spi_send[3] = spi_send3;
+        //ss3 = seg7nums[inDig];
+        //spi_send3 = (ss3 << 8) | (0xF7); //11011111
+        //spi_send[3] = spi_send3;
         return inDig;
     } if(pos == 4) {
-        ss4 = seg7nums[inDig];
-        spi_send4 = (ss4 << 8) | (0xEF); //11011111
-        spi_send[4] = spi_send4;
+        //ss4 = seg7nums[inDig];
+        //spi_send4 = (ss4 << 8) | (0xEF); //11011111
+        //spi_send[4] = spi_send4;
         return inDig;
     } if(pos == 5) {
-        ss5 = seg7nums[inDig];
-        spi_send5 = (ss5 << 8) | (0xDF); //11011111
-        spi_send[5] = spi_send5;
+        //ss5 = seg7nums[inDig];
+        //spi_send5 = (ss5 << 8) | (0xDF); //11011111
+        //spi_send[5] = spi_send5;
         return inDig;
     }
     return 0;
+}
+
+//Check this function
+void alarm_set() {
+    alarm_hrT = input_Digit(0);
+    alarm_hrO = input_Digit(1);
+    alarm_mnT = input_Digit(2);
+    alarm_mnO = input_Digit(3);
+    alarm_scT = input_Digit(4);
+    alarm_scO = input_Digit(5);
+    alarmTime[0] = alarm_hrT;
+    alarmTime[1] = alarm_hrO;
+    alarmTime[2] = alarm_mnT;
+    alarmTime[3] = alarm_mnO;
+    alarmTime[4] = alarm_scT;
+    alarmTime[5] = alarm_scO;
 }
 
 int main(void)
@@ -335,5 +335,16 @@ int main(void)
     spi_setup();
     dma_spi_init();
     tim15_setup();
+    setup_timer6();
+    init_keypad();
+    /*while(1) {
+        char check = get_char_key();
+        if(check == '*') {
+            alarm_set();
+        }
+    }*/
+    int alarm[6] = {1,8,0,9,2,0};
+    alarmTime = alarm;
+    trigger_alarm(alarmTime);
     for(;;);
 }
