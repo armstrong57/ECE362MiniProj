@@ -12,6 +12,20 @@
 #include "stm32f0xx.h"
 #include "stm32f0_discovery.h"
 
+int get_key_press();
+int get_key_release();
+void TIM6_DAC_IRQHandler();
+void setup_timer6();
+void init_keypad();
+int get_key_pressed();
+char get_char_key();
+void dma_spi_init();
+void spi_setup();
+void gpio_setup();
+void trigger_alarm(int*);
+char input_Digit(int);
+void alarm_set();
+
 #define s_0 0xC0
 #define s_1 0xF9
 #define s_2 0xA4
@@ -32,7 +46,7 @@ int8_t history[16] = {0};
 int8_t lookup[16] = {1,4,7,0xe,2,5,8,0,3,6,9,0xf,0xa,0xb,0xc,0xd};
 char char_lookup[16] = {'1','4','7','*','2','5','8','0','3','6','9','#','A','B','C','D'};
 int alarm_hrT, alarm_mnT, alarm_scT, alarm_hrO, alarm_mnO, alarm_scO;
-int * alarmTime;
+int alarmTime[6];
 
 int hrs = 18;
 int mins = 9;
@@ -172,6 +186,10 @@ void gpio_setup(void) {
     //LED output for testing alarm
     GPIOB->MODER &= ~(3 << (2 * 5));
     GPIOB->MODER |= 1 << (2 * 5);
+
+    //LEDs for checking alarm input
+    GPIOB->MODER &= ~(3 << (2 * 4) | 3 << (2 * 6));
+    GPIOB->MODER |= 1 << (2 * 4) | 1 << (2 * 6);
 }
 
 //This function works
@@ -241,71 +259,89 @@ void trigger_alarm(int * time) {
                 mins == (time[2] * 10 + time[3]) &&
                 secs == (time[4] * 10 + time[5])) {
             GPIOB->ODR |= 1 << 5;
+            micro_wait(200000);
+            GPIOB->ODR &= ~(1 << 5);
             return;
         }
     }
 }
 
 //Check this function
-int input_Digit (int pos) {
+char input_Digit (int pos) {
     //pos == 0: hrT
     //pos == 1: hrO
     //pos == 2: mnT
     //pos == 3: mnO
     //pos == 4: scT
     //pos == 5: scO
-    int inDig;
+    GPIOB->ODR &= ~(1 << 4);
+    char inDig;
     inDig = get_char_key(); //this will be from Sam's code
     if(pos == 0) {
         //ss0 = seg7nums[inDig];
         //spi_send0 = (ss0 << 8) | (0xFE); //11111011
         //spi_send[0] = spi_send0;
-        while (inDig > 2) {
+        while (inDig > '2') {
             inDig = get_char_key();
+            //GPIOB->ODR |= 1 << 6;
             //ss0 = seg7nums[inDig];
             //spi_send0 = (ss0 << 8) | (0xFE); //11111011
             //spi_send[0] = spi_send0;
         }
-        return inDig;
+        GPIOB->ODR |= 1 << 4;
+        micro_wait(200000);
+        return inDig - 48;
     } if(pos == 1) {
         //ss1 = seg7nums[inDig];
         //spi_send1 = (ss1 << 8) | (0xFD); //11110111
         //spi_send[1] = spi_send1;
-        while (alarm_hrT == 2 && inDig > 3) {
+        while (alarm_hrT == '2' && inDig > '3') {
             inDig = get_char_key();
             //ss1 = seg7nums[inDig];
             //spi_send1 = (ss1 << 8) | (0xFD); //11110111
             //spi_send[1] = spi_send1;
 
         }
-        return inDig;
+        GPIOB->ODR |= 1 << 4;
+        micro_wait(200000);
+        return inDig - 48;
     } if(pos == 2) {
         //ss2 = seg7nums[inDig];
         //spi_send2 = (ss2 << 8) | (0xFB); //11101111
         //spi_send[2] = spi_send2;
-        while(inDig > 5) {
+        while(inDig > '5') {
             inDig = get_char_key();
             //ss2 = seg7nums[inDig];
             //spi_send2 = (ss2 << 8) | (0xFB); //11101111
             //spi_send[2] = spi_send2;
-
         }
-        return inDig;
+        GPIOB->ODR |= 1 << 4;
+        micro_wait(200000);
+        return inDig - 48;
     } if(pos == 3) {
         //ss3 = seg7nums[inDig];
         //spi_send3 = (ss3 << 8) | (0xF7); //11011111
         //spi_send[3] = spi_send3;
-        return inDig;
+        GPIOB->ODR |= 1 << 4;
+        micro_wait(200000);
+        return inDig - 48;
     } if(pos == 4) {
+        while(inDig > '5') {
+            inDig = get_char_key();
+        }
         //ss4 = seg7nums[inDig];
         //spi_send4 = (ss4 << 8) | (0xEF); //11011111
         //spi_send[4] = spi_send4;
-        return inDig;
+        GPIOB->ODR |= 1 << 4;
+        micro_wait(200000);
+        return inDig - 48;
     } if(pos == 5) {
         //ss5 = seg7nums[inDig];
         //spi_send5 = (ss5 << 8) | (0xDF); //11011111
         //spi_send[5] = spi_send5;
-        return inDig;
+        GPIOB->ODR |= 1 << 4;
+        micro_wait(200000);
+        return inDig - 48;
     }
     return 0;
 }
@@ -318,12 +354,27 @@ void alarm_set() {
     alarm_mnO = input_Digit(3);
     alarm_scT = input_Digit(4);
     alarm_scO = input_Digit(5);
+    //GPIOB->ODR |= 1 << 4;
+    //micro_wait(500000);
+    GPIOB->ODR &= ~(1 << 4);
     alarmTime[0] = alarm_hrT;
     alarmTime[1] = alarm_hrO;
     alarmTime[2] = alarm_mnT;
     alarmTime[3] = alarm_mnO;
     alarmTime[4] = alarm_scT;
     alarmTime[5] = alarm_scO;
+}
+
+void set_alarm_time(void) {
+    while(1) {
+        char check = get_char_key();
+        if(check == '*') {
+            GPIOB->ODR |= 1 << 4;
+            micro_wait(200000);
+            alarm_set();
+            return;
+        }
+    }
 }
 
 int main(void)
@@ -337,14 +388,9 @@ int main(void)
     tim15_setup();
     setup_timer6();
     init_keypad();
-    /*while(1) {
-        char check = get_char_key();
-        if(check == '*') {
-            alarm_set();
-        }
-    }*/
-    int alarm[6] = {1,8,0,9,2,0};
-    alarmTime = alarm;
-    trigger_alarm(alarmTime);
+    while(1) {
+        set_alarm_time();
+        trigger_alarm(alarmTime);
+    }
     for(;;);
 }
